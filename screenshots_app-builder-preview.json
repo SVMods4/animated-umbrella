@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Театр Теней",
+      "hasCanvas": true,
+      "bodyTextLen": 174,
+      "bodyTextHash": "3add2a7e2f6dd4f91a6893e0a5dfe41fa22520cc392baa2bcdace105027f461b",
+      "bodyTextPrefix": "ТЕАТР «ЭТЕРНИЯ» ТЕАТР ТЕНЕЙ Спектакль «Последний зритель» не зак",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Театр Теней",
+      "hasCanvas": true,
+      "bodyTextLen": 174,
+      "bodyTextHash": "3add2a7e2f6dd4f91a6893e0a5dfe41fa22520cc392baa2bcdace105027f461b",
+      "bodyTextPrefix": "ТЕАТР «ЭТЕРНИЯ» ТЕАТР ТЕНЕЙ Спектакль «Последний зритель» не зак",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-preview.json"
+}

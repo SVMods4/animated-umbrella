@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Театр Теней</title>
+<style>
+@font-face {
+  font-family: 'DoorsCyr';
+  src: url('DoorsCyr.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; }
+html, body { width:100%; height:100%; overflow:hidden; background:#0c0806; font-family:'DoorsCyr', Georgia, serif; color:#e8d5b5; touch-action:none; }
+#gameContainer { position:relative; width:100%; height:100%; }
+canvas { display:block; width:100%; height:100%; background:#0c0806; }
+#ui { position:absolute; inset:0; pointer-events:none; z-index:10; }
+#hud { position:absolute; top:10px; left:10px; right:50px; display:flex; justify-content:space-between; gap:6px; flex-wrap:wrap; }
+.hud-box { background:rgba(12,8,6,0.82); border:1px solid #6a4a2a; border-radius:5px; padding:5px 9px; font-size:12px; }
+.hud-box .label { color:#a08060; font-size:9px; letter-spacing:0.5px; }
+.bar { width:80px; height:7px; background:#1a0c08; border:1px solid #4a2a1a; border-radius:2px; margin-top:2px; overflow:hidden; }
+.bar-fill { height:100%; transition:width .15s; }
+#healthFill { background:linear-gradient(90deg,#8b1a1a,#d04030); }
+#batteryFill { background:linear-gradient(90deg,#3a5a1a,#7aba2a); }
+#message { position:absolute; bottom:155px; left:50%; transform:translateX(-50%); background:rgba(12,8,6,0.92); border:1px solid #7a4a2a; padding:9px 16px; border-radius:6px; font-size:13px; max-width:88%; text-align:center; opacity:0; transition:opacity .35s; }
+#message.show { opacity:1; }
+#controls { position:absolute; bottom:0; left:0; right:0; height:155px; pointer-events:none; z-index:20; }
+#joystickZone { position:absolute; left:16px; bottom:16px; width:120px; height:120px; pointer-events:auto; }
+#joystickBase { width:120px; height:120px; border-radius:50%; background:rgba(25,15,10,0.55); border:2px solid rgba(130,80,40,0.5); position:relative; }
+#joystickKnob { width:48px; height:48px; border-radius:50%; background:radial-gradient(circle at 35% 35%,#c09060,#5a3018); border:2px solid #e0b080; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); }
+.ctrl-btn { position:absolute; width:56px; height:56px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:20px; pointer-events:auto; border:2px solid; color:#e0c090; }
+#btnFlash { right:16px; bottom:80px; background:radial-gradient(circle at 35% 35%,#4a3a18,#1a1008); border-color:#8a6a30; }
+#btnFlash.active { background:radial-gradient(circle at 35% 35%,#c0a040,#6a4a10); border-color:#f0d060; box-shadow:0 0 14px rgba(220,180,40,.6); }
+#btnInteract { right:16px; bottom:16px; background:radial-gradient(circle at 35% 35%,#3a2a18,#120c08); border-color:#6a4a30; }
+#btnCrouch { right:80px; bottom:16px; background:radial-gradient(circle at 35% 35%,#2a2218,#100c08); border-color:#5a4a30; font-size:16px; }
+#btnSettings { position:absolute; top:10px; right:10px; width:36px; height:36px; border-radius:6px; background:rgba(20,12,8,0.75); border:1px solid #5a3a20; color:#c0a070; font-size:16px; pointer-events:auto; display:flex; align-items:center; justify-content:center; z-index:30; }
+.screen { position:absolute; inset:0; background:radial-gradient(ellipse at center,#1a0e0a 0%,#080404 75%); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:50; padding:16px; text-align:center; }
+.screen h1 { font-family:'DoorsCyr', Georgia, serif; font-size:clamp(36px,11vw,64px); color:#c04030; text-shadow:0 0 18px #800000,0 0 36px #400000; margin-bottom:6px; letter-spacing:2px; }
+.screen .sub { font-size:14px; color:#a08060; margin-bottom:22px; letter-spacing:1px; }
+.btn { background:linear-gradient(180deg,#3a2010,#1a1008); border:2px solid #8a5a30; color:#e0c090; font-family:'DoorsCyr', Georgia, serif; font-size:16px; padding:12px 28px; border-radius:6px; cursor:pointer; margin:6px; letter-spacing:1px; pointer-events:auto; }
+.btn:active { transform:scale(0.96); }
+.btn.primary { background:linear-gradient(180deg,#5a2010,#2a1008); border-color:#c04030; color:#f0d0a0; }
+.hidden { display:none !important; }
+#settingsPanel { background:rgba(8,4,4,0.95); max-width:320px; width:92%; padding:20px; border:2px solid #6a4a2a; border-radius:8px; }
+#settingsPanel label { display:block; margin:10px 0 4px; color:#c0a070; font-size:13px; text-align:left; }
+#settingsPanel input[type=range] { width:100%; }
+#noteScreen { background:rgba(5,2,2,0.94); z-index:60; }
+#noteContent { background:#1a120a; border:2px solid #6a4a2a; max-width:320px; padding:20px; border-radius:5px; font-size:14px; line-height:1.5; color:#d0b080; }
+</style>
+</head>
+<body>
+<div id="gameContainer">
+<canvas id="c"></canvas>
+<div id="ui">
+  <div id="hud" class="hidden">
+    <div class="hud-box"><div class="label">ЗДОРОВЬЕ</div><div class="bar"><div id="healthFill" class="bar-fill" style="width:100%"></div></div></div>
+    <div class="hud-box"><div class="label">КОМНАТА</div><div id="roomNum">1 / 25</div></div>
+    <div class="hud-box"><div class="label">ФОНАРИК</div><div class="bar"><div id="batteryFill" class="bar-fill" style="width:100%"></div></div></div>
+  </div>
+  <div id="message"></div>
+  <button id="btnSettings" class="hidden">⚙</button>
+</div>
+<div id="controls" class="hidden">
+  <div id="joystickZone"><div id="joystickBase"><div id="joystickKnob"></div></div></div>
+  <div id="btnFlash" class="ctrl-btn">🔦</div>
+  <div id="btnInteract" class="ctrl-btn">✋</div>
+  <div id="btnCrouch" class="ctrl-btn">⬇</div>
+</div>
+
+<div id="titleScreen" class="screen">
+  <h1>ТЕАТР ТЕНЕЙ</h1>
+  <div class="sub">Заброшенный театр • 25 дверей • Финальный босс</div>
+  <button class="btn primary" id="btnStart">ВОЙТИ</button>
+  <button class="btn" id="btnContinue" style="display:none">ПРОДОЛЖИТЬ</button>
+  <button class="btn" id="btnOpenSettings">НАСТРОЙКИ</button>
+</div>
+
+<div id="settingsScreen" class="screen hidden">
+  <div id="settingsPanel">
+    <h2 style="color:#c04030;margin-bottom:12px;font-family:'DoorsCyr'">Настройки</h2>
+    <label>Яркость: <span id="brightVal">1.2</span></label>
+    <input type="range" id="setBright" min="0.7" max="1.8" step="0.1" value="1.2">
+    <label>Чувствительность: <span id="sensVal">1.0</span></label>
+    <input type="range" id="setSens" min="0.5" max="1.8" step="0.1" value="1.0">
+    <label>Сложность</label>
+    <select id="setDiff" style="width:100%;padding:6px;background:#1a1008;color:#e0c090;border:1px solid #6a4a2a;border-radius:4px;font-family:inherit;">
+      <option value="0.7">Лёгкая</option>
+      <option value="1.0" selected>Нормальная</option>
+      <option value="1.35">Сложная</option>
+    </select>
+    <div style="margin-top:18px">
+      <button class="btn" id="btnCloseSettings">Закрыть</button>
+      <button class="btn" id="btnResetSave" style="border-color:#800020">Сброс сохранения</button>
+    </div>
+  </div>
+</div>
+
+<div id="noteScreen" class="screen hidden">
+  <div id="noteContent"></div>
+  <button class="btn" id="btnCloseNote" style="margin-top:16px">Закрыть</button>
+</div>
+<div id="deathScreen" class="screen hidden">
+  <h1>ТЫ ПАЛ</h1>
+  <p style="color:#a08060;margin:10px 0 20px;max-width:280px">Тьма театра поглотила тебя...</p>
+  <button class="btn primary" id="btnRestart">НАЧАТЬ СНОВА</button>
+</div>
+<div id="winScreen" class="screen hidden">
+  <h1>ВЫХОД</h1>
+  <p style="color:#a0c080;margin:10px 0 20px;max-width:300px">Ты прошёл все двери и победил финального босса. Театр отпустил тебя... пока.</p>
+  <button class="btn primary" id="btnWinRestart">ЕЩЁ РАЗ</button>
+</div>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resize() {
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  W = innerWidth; H = innerHeight;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+addEventListener('resize', resize); resize();
+
+// ===== SETTINGS =====
+const Settings = { brightness: 1.2, sens: 1.0, difficulty: 1.0 };
+function loadSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem('ts_settings') || '{}');
+    if (s.brightness) Settings.brightness = +s.brightness;
+    if (s.sens) Settings.sens = +s.sens;
+    if (s.difficulty) Settings.difficulty = +s.difficulty;
+  } catch(e){}
+  document.getElementById('setBright').value = Settings.brightness;
+  document.getElementById('brightVal').textContent = Settings.brightness.toFixed(1);
+  document.getElementById('setSens').value = Settings.sens;
+  document.getElementById('sensVal').textContent = Settings.sens.toFixed(1);
+  document.getElementById('setDiff').value = Settings.difficulty;
+}
+function saveSettings() { localStorage.setItem('ts_settings', JSON.stringify(Settings)); }
+document.getElementById('setBright').oninput = e => { Settings.brightness = +e.target.value; document.getElementById('brightVal').textContent = Settings.brightness.toFixed(1); saveSettings(); };
+document.getElementById('setSens').oninput = e => { Settings.sens = +e.target.value; document.getElementById('sensVal').textContent = Settings.sens.toFixed(1); saveSettings(); };
+document.getElementById('setDiff').onchange = e => { Settings.difficulty = +e.target.value; saveSettings(); };
+loadSettings();
+
+// ===== DATA =====
+const ROOM_NAMES = ["Вход","Фойе","Гардероб","Коридор","Гримёрка","Сцена","За сценой","Кладовая","Коридор","Балкон","Зрительный зал","Подсобка","Лестница","Подвал","Архив","Электрощитовая","Тоннель","Старые декорации","Репетиционная","Гримёрка №2","Малый зал","Кулисы","Главный зал","Выходной коридор","Выход"];
+const NOTES = [
+  {room:2, text:"Дневник актёра:\n«Свет погас на третьем акте. Мы слышали шаги за кулисами...»"},
+  {room:5, text:"Записка гримёра:\n«За зеркалом есть ход. Но люк внизу заперт. Ищи лом.»"},
+  {room:8, text:"Обрывок афиши:\n«Премьера отменена. Зрители не ушли.»"},
+  {room:14, text:"Запись смотрителя:\n«В подвале слышен шёпот. Батареи садятся быстрее.»"},
+  {room:18, text:"Предупреждение:\n«Картонные декорации ожили. Если начнут расползаться — беги.»"},
+  {room:22, text:"Записка режиссёра:\n«25 дверей. Только одна ведёт наружу. Остальные — внутрь.»"}
+];
+
+const G = {
+  state:'title', room:0, player:null, entities:[], roomData:null, fog:[],
+  time:0, messageTimer:0, shake:0, keys:0, hasKey:false, hasCrowbar:false,
+  notesFound:[], inSecret:false, meatFlood:0, meatActive:false,
+  surfMode:false, bossPhase:0, bossHP:0, warning:0
+};
+
+// ===== PLAYER =====
+class Player {
+  constructor(x,y) {
+    this.x=x; this.y=y; this.vx=0; this.vy=0; this.r=13;
+    this.baseSpeed=2.6; this.health=100; this.battery=100;
+    this.flashlight=false; this.angle=0; this.invuln=0;
+    this.hiding=false; this.crouch=false; this.walkFrame=0; this.walkTimer=0;
+    this.moving=false; this.surfBalance=0;
+  }
+  get speed() {
+    let s = this.baseSpeed * Settings.sens;
+    if (this.crouch) s *= 0.55;
+    if (G.surfMode) s *= 1.2;
+    return s;
+  }
+  update(dt, input) {
+    if (this.hiding) return;
+    if (this.invuln > 0) this.invuln -= dt;
+    let mx = input.mx, my = input.my;
+    const len = Math.hypot(mx, my);
+    this.moving = len > 0.12;
+    if (this.moving) {
+      mx /= len; my /= len;
+      this.vx = mx * this.speed; this.vy = my * this.speed;
+      this.angle = Math.atan2(my, mx);
+      this.walkTimer += dt;
+      if (this.walkTimer > (this.crouch ? 9 : 6)) { this.walkFrame = (this.walkFrame+1)%4; this.walkTimer=0; }
+    } else { this.vx *= 0.65; this.vy *= 0.65; this.walkFrame=0; }
+
+    if (G.surfMode) {
+      this.surfBalance += mx * 0.09 * dt;
+      this.surfBalance *= 0.968;
+      if (Math.abs(this.surfBalance) > 1.25) { this.takeDamage(7); this.surfBalance *= 0.4; }
+    }
+
+    const room = G.roomData;
+    const pad = this.crouch ? 16 : 22;
+    let nx = this.x + this.vx, ny = this.y + this.vy;
+    if (nx - this.r > pad && nx + this.r < room.w - pad) this.x = nx;
+    if (ny - this.r > pad && ny + this.r < room.h - pad) this.y = ny;
+
+    if (this.flashlight && this.battery > 0) {
+      this.battery = Math.max(0, this.battery - 0.026 * dt);
+      if (this.battery <= 0) this.flashlight = false;
+    } else if (!this.flashlight && this.battery < 100) {
+      this.battery = Math.min(100, this.battery + 0.012 * dt);
+    }
+  }
+  takeDamage(d) {
+    if (this.invuln > 0 || this.hiding) return;
+    this.health = Math.max(0, this.health - d * Settings.difficulty);
+    this.invuln = 42;
+    G.shake = 10;
+    if (this.health <= 0) die();
+  }
+  draw(camX, camY) {
+    const px = this.x - camX, py = this.y - camY;
+    const crouch = this.crouch;
+    const sy = crouch ? 0.7 : 1;
+    const flash = this.invuln > 0 && Math.floor(G.time/3)%2===0;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath(); ctx.ellipse(px, py + 11*sy, 13, 5, 0, 0, Math.PI*2); ctx.fill();
+
+    ctx.save();
+    ctx.translate(px, py);
+    if (this.angle > Math.PI/2 || this.angle < -Math.PI/2) ctx.scale(-1, 1);
+
+    const leg = this.moving ? Math.sin(this.walkFrame * 1.57) * (crouch ? 4 : 7) : 0;
+    ctx.strokeStyle = flash ? '#c06060' : '#2a1a10';
+    ctx.lineWidth = 4; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-3, 2); ctx.lineTo(-3 - leg*0.3, 12*sy); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(3, 2); ctx.lineTo(3 + leg*0.3, 12*sy); ctx.stroke();
+
+    ctx.fillStyle = flash ? '#d06050' : '#3a2818';
+    ctx.beginPath(); ctx.ellipse(0, crouch ? -2 : -4, 10, 12*sy, 0, 0, Math.PI*2); ctx.fill();
+
+    const arm = this.moving ? Math.sin(this.walkFrame * 1.57 + Math.PI) * 5 : 0;
+    ctx.strokeStyle = flash ? '#e08070' : '#c8a070';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(-8, -6); ctx.lineTo(-11 - arm*0.2, 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(8, -6); ctx.lineTo(11 + arm*0.2, 2); ctx.stroke();
+
+    ctx.fillStyle = flash ? '#ffb0a0' : '#e8c8a8';
+    ctx.beginPath(); ctx.arc(0, crouch ? -12 : -15, 7, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = flash ? '#4a2020' : '#1a1008';
+    ctx.beginPath(); ctx.arc(0, crouch ? -14 : -17, 7.5, Math.PI, 0); ctx.fill();
+    ctx.fillStyle = '#1a0805';
+    ctx.beginPath(); ctx.arc(-2.5, crouch ? -13 : -16, 1.4, 0, Math.PI*2); ctx.arc(2.5, crouch ? -13 : -16, 1.4, 0, Math.PI*2); ctx.fill();
+
+    if (this.flashlight && this.battery > 0) {
+      ctx.fillStyle = '#c0a040'; ctx.fillRect(9, -2, 5, 9);
+      ctx.fillStyle = '#fff8c0'; ctx.beginPath(); ctx.arc(11.5, -3, 2.5, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+// ===== ENTITIES =====
+class Entity {
+  constructor(type, x, y) {
+    this.type=type; this.x=x; this.y=y; this.r=15; this.alive=true;
+    this.timer=0; this.state='idle'; this.speed=1.15; this.alpha=1; this.warn=false;
+  }
+  update(dt, p) {
+    this.timer += dt;
+    const dist = Math.hypot(this.x - p.x, this.y - p.y);
+    const diff = Settings.difficulty;
+
+    if (this.type === 'chaser') {
+      if (!p.flashlight || p.battery < 12) {
+        this.speed = 1.55 * diff; this.seek(p, dt);
+        if (dist < 26) p.takeDamage(15);
+      } else { this.speed = 0.35; this.flee(p, dt); }
+      if (dist < 170 && !this.warn) { this.warn=true; showMsg('Слышишь шаги... Тень близко'); G.warning=28; }
+    } else if (this.type === 'photophobe') {
+      if (p.flashlight && p.battery > 5) {
+        this.speed = 1.9 * diff; this.seek(p, dt);
+        if (dist < 28) p.takeDamage(18);
+        if (dist < 150 && !this.warn) { this.warn=true; showMsg('Оно ненавидит свет! Выключи!'); G.warning=28; }
+      } else {
+        this.speed = 0.55;
+        if (this.timer > 70) { this.tx = this.x+(Math.random()-0.5)*180; this.ty = this.y+(Math.random()-0.5)*180; this.timer=0; }
+        this.moveTo(this.tx||this.x, this.ty||this.y, dt);
+      }
+    } else if (this.type === 'roomguard') {
+      if (dist < 38) p.takeDamage(10);
+      const room = G.roomData;
+      if (Math.abs(p.x-room.exitX)<90 && Math.abs(p.y-room.exitY)<90) this.seek(p, dt*0.65);
+    } else if (this.type === 'hider') {
+      if (this.state==='idle' && dist<190) { this.state='hunt'; showMsg('Прячься! Оно идёт!'); G.warning=35; }
+      if (this.state==='hunt') {
+        this.speed = 1.75*diff; this.seek(p, dt);
+        if (dist<24 && !p.hiding) p.takeDamage(20);
+        if (p.hiding && this.timer>110) { this.alive=false; showMsg('Оно ушло...'); }
+      }
+    } else if (this.type === 'rare') {
+      this.alpha = 0.45 + Math.sin(G.time*0.05)*0.25;
+      if (dist<48 && this.state==='idle') {
+        this.state='gift'; G.keys++; G.hasKey=true; showMsg('Сущность оставила ключ...'); this.alive=false;
+      }
+    } else if (this.type === 'cardboard') {
+      G.meatActive = true;
+      G.meatFlood = Math.min(1, G.meatFlood + 0.0017*dt*diff);
+      if (G.meatFlood > 0.12 && !this.warn) { this.warn=true; showMsg('ДЕКОРАЦИЯ ОЖИЛА! БЕГИ К ВЫХОДУ!'); G.warning=50; }
+      const floodY = G.roomData.h - G.meatFlood * G.roomData.h * 0.85;
+      if (p.y > floodY + 18) p.takeDamage(5 * dt * 0.12);
+    } else if (this.type === 'boss') {
+      if (G.bossPhase === 0) {
+        this.speed = 1.25*diff; this.seek(p, dt);
+        if (dist < 40) p.takeDamage(13);
+        if (this.timer > 380) { G.bossPhase=1; showMsg('Босс в ярости! Свети фонариком!'); }
+      } else {
+        this.speed = 2.0*diff; this.seek(p, dt);
+        if (dist < 35) p.takeDamage(16);
+        if (p.flashlight && dist < 110) { this.speed *= 0.35; G.bossHP -= 0.18*dt; }
+        if (G.bossHP <= 0) {
+          this.alive=false; showMsg('Босс повержен! Дверь открыта.');
+          G.roomData.locked=false; G.hasKey=true;
+        }
+      }
+    }
+  }
+  seek(p, dt) {
+    const dx=p.x-this.x, dy=p.y-this.y, len=Math.hypot(dx,dy)||1;
+    this.x += (dx/len)*this.speed*dt*0.55; this.y += (dy/len)*this.speed*dt*0.55;
+  }
+  flee(p, dt) {
+    const dx=this.x-p.x, dy=this.y-p.y, len=Math.hypot(dx,dy)||1;
+    this.x += (dx/len)*this.speed*dt*0.45; this.y += (dy/len)*this.speed*dt*0.45;
+  }
+  moveTo(tx, ty, dt) {
+    const dx=tx-this.x, dy=ty-this.y, len=Math.hypot(dx,dy)||1;
+    if (len>6) { this.x+=(dx/len)*this.speed*dt*0.4; this.y+=(dy/len)*this.speed*dt*0.4; }
+  }
+  draw(camX, camY) {
+    const px=this.x-camX, py=this.y-camY;
+    ctx.save(); ctx.globalAlpha=this.alpha;
+    if (this.type==='chaser') {
+      ctx.fillStyle='#1a0508';
+      ctx.beginPath(); ctx.moveTo(px,py-20); ctx.quadraticCurveTo(px-18,py-4,px-12,py+14); ctx.quadraticCurveTo(px,py+8,px+12,py+14); ctx.quadraticCurveTo(px+18,py-4,px,py-20); ctx.fill();
+      ctx.fillStyle='#c01818'; ctx.beginPath(); ctx.arc(px-4,py-7,2.8,0,Math.PI*2); ctx.arc(px+4,py-7,2.8,0,Math.PI*2); ctx.fill();
+    } else if (this.type==='photophobe') {
+      ctx.fillStyle='#d0c8b0'; ctx.beginPath(); ctx.ellipse(px,py,12,16,0,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#a09078'; ctx.beginPath(); ctx.arc(px,py-13,8,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#0a0505'; ctx.beginPath(); ctx.ellipse(px-3,py-14,2.2,3.2,0,0,Math.PI*2); ctx.ellipse(px+3,py-14,2.2,3.2,0,0,Math.PI*2); ctx.fill();
+    } else if (this.type==='roomguard') {
+      ctx.fillStyle='#221018'; ctx.fillRect(px-7,py-26,14,38); ctx.beginPath(); ctx.arc(px,py-28,9,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#700018'; ctx.beginPath(); ctx.arc(px-3,py-30,1.8,0,Math.PI*2); ctx.arc(px+3,py-30,1.8,0,Math.PI*2); ctx.fill();
+    } else if (this.type==='hider') {
+      ctx.fillStyle='#1a1008'; ctx.beginPath(); ctx.ellipse(px,py+3,16,9,0,0,Math.PI*2); ctx.fill();
+      for (let i=0;i<4;i++){ const a=G.time*0.1+i*1.5; ctx.strokeStyle='#2a1810'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.moveTo(px,py); ctx.quadraticCurveTo(px+Math.cos(a)*18,py+Math.sin(a)*10,px+Math.cos(a)*25,py+6); ctx.stroke(); }
+      ctx.fillStyle='#800010'; ctx.beginPath(); ctx.arc(px-3,py-1,2.2,0,Math.PI*2); ctx.arc(px+3,py-1,2.2,0,Math.PI*2); ctx.fill();
+    } else if (this.type==='rare') {
+      const g=ctx.createRadialGradient(px,py,0,px,py,28); g.addColorStop(0,'rgba(180,200,255,0.35)'); g.addColorStop(1,'rgba(100,120,200,0)');
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(px,py,28,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='rgba(200,220,255,0.65)'; ctx.beginPath(); ctx.arc(px,py-3,9,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='rgba(220,240,255,0.85)'; ctx.beginPath(); ctx.arc(px,py-11,6,0,Math.PI*2); ctx.fill();
+    } else if (this.type==='cardboard') {
+      ctx.fillStyle='#5a4030'; ctx.fillRect(px-30,py-40,60,80);
+      ctx.fillStyle='#8a6040'; ctx.fillRect(px-22,py-30,44,20);
+      ctx.fillStyle='#c02020'; ctx.font='10px DoorsCyr'; ctx.textAlign='center'; ctx.fillText('ДЕКОРАЦИЯ',px,py+5);
+    } else if (this.type==='boss') {
+      const pulse=1+Math.sin(G.time*0.1)*0.05;
+      ctx.fillStyle='#2a0a10'; ctx.beginPath(); ctx.ellipse(px,py,28*pulse,36*pulse,0,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#1a0508'; ctx.beginPath(); ctx.arc(px,py-28,18*pulse,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#e01010';
+      for (let i=0;i<5;i++){ const a=i/5*Math.PI*2+G.time*0.03; ctx.beginPath(); ctx.arc(px+Math.cos(a)*12,py-28+Math.sin(a)*8,3,0,Math.PI*2); ctx.fill(); }
+      if (G.bossHP>0) {
+        ctx.fillStyle='#300010'; ctx.fillRect(px-30,py-55,60,6);
+        ctx.fillStyle='#c02020'; ctx.fillRect(px-30,py-55,60*(G.bossHP/100),6);
+      }
+    }
+    ctx.restore();
+  }
+}
+
+// ===== ROOM =====
+function generateRoom(index, isSecret=false) {
+  const name = isSecret ? 'Грязная секретная' : ROOM_NAMES[index];
+  let w = 540 + Math.floor(Math.random()*70);
+  let h = 430 + Math.floor(Math.random()*50);
+  if (isSecret) { w=380; h=320; }
+  const room = {
+    index, name, w, h, isSecret,
+    exitX: w-48, exitY: h/2, enterX:48, enterY:h/2,
+    locked: !isSecret && (index%4===0 || index===11 || index===17 || index===23),
+    props:[], notes:[], floorPattern:index%3, special:null
+  };
+  if (index===17) room.special='cardboard';
+  if (index===20) room.special='surf';
+  if (index===23) room.special='boss';
+
+  const type = name.toLowerCase();
+  if (type.includes('зал')||type.includes('сцена')||type.includes('зритель')) {
+    for (let row=0;row<4;row++) for (let col=0;col<5;col++)
+      room.props.push({type:'chair',x:110+col*72+(row%2)*18,y:70+row*52,r:16,hideable:true});
+  } else if (type.includes('гримёр')||type.includes('подсоб')||type.includes('кладов')) {
+    for (let i=0;i<4;i++) room.props.push({type:'cabinet',x:70+i*100,y:65,r:20,hideable:true});
+    room.props.push({type:'mirror',x:w-70,y:90,r:18,hideable:false});
+  } else if (type.includes('подвал')||type.includes('архив')||type.includes('электро')||isSecret) {
+    for (let i=0;i<5;i++) room.props.push({type:'crate',x:60+(i%3)*130,y:70+Math.floor(i/3)*160,r:18,hideable:true});
+  } else {
+    for (let i=0;i<3;i++) room.props.push({type:'table',x:90+i*140,y:h/2+(i%2?50:-50),r:20,hideable:false});
+  }
+
+  if (room.locked && Math.random()<0.75) { room.keyX=90+Math.random()*(w-180); room.keyY=90+Math.random()*(h-180); }
+  if (index===4 && !isSecret) { room.secretX=w-60; room.secretY=80; }
+  if (isSecret) { room.hatchX=w/2; room.hatchY=h-60; room.locked=true; }
+  if (Math.random()<0.35 || index===13) { room.batteryX=50+Math.random()*(w-100); room.batteryY=50+Math.random()*(h-100); }
+  if (index===9) { room.crowbarX=100+Math.random()*(w-200); room.crowbarY=100+Math.random()*(h-200); }
+
+  const note = NOTES.find(n=>n.room===index+1);
+  if (note && !isSecret) room.notes.push({x:70+Math.random()*(w-140),y:70+Math.random()*(h-140),text:note.text,taken:false});
+  return room;
+}
+
+function spawnEntities(room) {
+  G.entities=[]; G.meatFlood=0; G.meatActive=false; G.surfMode=false; G.bossPhase=0; G.bossHP=100;
+  const idx=room.index;
+  if (room.special==='cardboard') G.entities.push(new Entity('cardboard', room.w*0.3, room.h*0.4));
+  if (room.special==='surf') { G.surfMode=true; showMsg('Сёрфинг по кровавой реке! Держи баланс!'); }
+  if (room.special==='boss') { G.entities.push(new Entity('boss', room.w/2, room.h/2)); showMsg('ФИНАЛЬНЫЙ БОСС! Свети на него!'); }
+  if ([5,10,15,19].includes(idx)) G.entities.push(new Entity('roomguard', room.exitX-35, room.exitY));
+  if (idx>1 && Math.random()<0.5 && !room.special) {
+    const t=['chaser','photophobe','hider'][Math.floor(Math.random()*3)];
+    G.entities.push(new Entity(t, 120+Math.random()*(room.w-240), 80+Math.random()*(room.h-160)));
+  }
+  if (idx>7 && Math.random()<0.1) G.entities.push(new Entity('rare', room.w/2, room.h/2));
+}
+
+// ===== INPUT =====
+const input={mx:0,my:0};
+let joyActive=false, joyId=null;
+const joyBase=document.getElementById('joystickBase'), joyKnob=document.getElementById('joystickKnob'), joyZone=document.getElementById('joystickZone');
+function joyHandler(cx,cy) {
+  const rect=joyBase.getBoundingClientRect();
+  const cx0=rect.left+rect.width/2, cy0=rect.top+rect.height/2;
+  let dx=cx-cx0, dy=cy-cy0; const max=40, len=Math.hypot(dx,dy);
+  if (len>max){dx=dx/len*max;dy=dy/len*max;}
+  joyKnob.style.transform=`translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+  input.mx=dx/max; input.my=dy/max;
+}
+joyZone.addEventListener('touchstart',e=>{e.preventDefault();joyActive=true;joyId=e.changedTouches[0].identifier;joyHandler(e.changedTouches[0].clientX,e.changedTouches[0].clientY);},{passive:false});
+joyZone.addEventListener('touchmove',e=>{e.preventDefault();for(const t of e.changedTouches)if(t.identifier===joyId)joyHandler(t.clientX,t.clientY);},{passive:false});
+function endJoy(){joyActive=false;joyId=null;input.mx=0;input.my=0;joyKnob.style.transform='translate(-50%,-50%)';}
+joyZone.addEventListener('touchend',endJoy); joyZone.addEventListener('touchcancel',endJoy);
+joyZone.addEventListener('mousedown',e=>{joyActive=true;joyHandler(e.clientX,e.clientY);});
+addEventListener('mousemove',e=>{if(joyActive&&e.buttons===1)joyHandler(e.clientX,e.clientY);});
+addEventListener('mouseup',()=>{if(joyActive)endJoy();});
+
+document.getElementById('btnFlash').addEventListener('touchstart',e=>{e.preventDefault();toggleFlash();},{passive:false});
+document.getElementById('btnFlash').addEventListener('mousedown',toggleFlash);
+document.getElementById('btnInteract').addEventListener('touchstart',e=>{e.preventDefault();interact();},{passive:false});
+document.getElementById('btnInteract').addEventListener('mousedown',interact);
+document.getElementById('btnCrouch').addEventListener('touchstart',e=>{e.preventDefault();toggleCrouch();},{passive:false});
+document.getElementById('btnCrouch').addEventListener('mousedown',toggleCrouch);
+
+const keys={};
+addEventListener('keydown',e=>{
+  keys[e.key.toLowerCase()]=true;
+  if(e.key==='f'||e.key==='F')toggleFlash();
+  if(e.key==='e'||e.key==='E'||e.key===' ')interact();
+  if(e.key==='c'||e.key==='C'||e.key==='Control')toggleCrouch();
+});
+addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
+function updateKeyboard(){
+  let mx=0,my=0;
+  if(keys['w']||keys['arrowup'])my-=1;
+  if(keys['s']||keys['arrowdown'])my+=1;
+  if(keys['a']||keys['arrowleft'])mx-=1;
+  if(keys['d']||keys['arrowright'])mx+=1;
+  if(mx||my){const l=Math.hypot(mx,my);input.mx=mx/l;input.my=my/l;}
+  else if(!joyActive){input.mx=0;input.my=0;}
+}
+
+function toggleFlash(){
+  if(G.state!=='play'||!G.player)return;
+  if(G.player.battery<=0){showMsg('Батарея села...');return;}
+  G.player.flashlight=!G.player.flashlight;
+  document.getElementById('btnFlash').classList.toggle('active',G.player.flashlight);
+}
+function toggleCrouch(){
+  if(G.state!=='play'||!G.player||G.player.hiding)return;
+  G.player.crouch=!G.player.crouch;
+  document.getElementById('btnCrouch').style.borderColor=G.player.crouch?'#c0a040':'#5a4a30';
+}
+
+function interact(){
+  if(G.state!=='play'||!G.player)return;
+  const p=G.player, room=G.roomData;
+  if(Math.hypot(p.x-room.exitX,p.y-room.exitY)<42){
+    if(room.locked && !G.hasKey && !(room.isSecret&&G.hasCrowbar)){
+      showMsg(room.isSecret?'Люк заперт. Нужен лом.':'Дверь заперта. Нужен ключ.'); return;
+    }
+    if(room.locked){G.hasKey=false;showMsg('Открыто!');}
+    if(room.isSecret){G.inSecret=false;enterRoom(4,true);return;}
+    nextRoom(); return;
+  }
+  if(room.secretX && Math.hypot(p.x-room.secretX,p.y-room.secretY)<35){
+    G.inSecret=true; enterRoom(4,false,true); showMsg('Грязная секретная комната...'); return;
+  }
+  if(room.hatchX && Math.hypot(p.x-room.hatchX,p.y-room.hatchY)<35){
+    if(!G.hasCrowbar){showMsg('Люк заперт. Нужен лом.');return;}
+    showMsg('Люк открыт ломом... Внизу тьма. Пока.'); G.keys++; G.hasKey=true; room.hatchX=null; return;
+  }
+  if(room.keyX && Math.hypot(p.x-room.keyX,p.y-room.keyY)<28){G.hasKey=true;G.keys++;room.keyX=null;showMsg('Найден ключ!');saveGame();return;}
+  if(room.crowbarX && Math.hypot(p.x-room.crowbarX,p.y-room.crowbarY)<28){G.hasCrowbar=true;room.crowbarX=null;showMsg('Найден лом!');saveGame();return;}
+  if(room.batteryX && Math.hypot(p.x-room.batteryX,p.y-room.batteryY)<26){p.battery=Math.min(100,p.battery+50);room.batteryX=null;showMsg('Батарея заряжена');return;}
+  for(const n of room.notes){if(!n.taken&&Math.hypot(p.x-n.x,p.y-n.y)<28){n.taken=true;G.notesFound.push(room.index);showNote(n.text);saveGame();return;}}
+  for(const prop of room.props){
+    if(prop.hideable&&Math.hypot(p.x-prop.x,p.y-prop.y)<prop.r+12){
+      p.hiding=!p.hiding; showMsg(p.hiding?'Ты спрятался...':'Ты вышел');
+      if(p.hiding) G.entities.forEach(e=>{if(e.type==='hider')e.timer=0;});
+      return;
+    }
+  }
+}
+
+// ===== UI / SAVE =====
+function showMsg(t){const el=document.getElementById('message');el.textContent=t;el.classList.add('show');G.messageTimer=130;}
+function showNote(t){G.state='note';document.getElementById('noteContent').innerText=t;document.getElementById('noteScreen').classList.remove('hidden');}
+document.getElementById('btnCloseNote').onclick=()=>{document.getElementById('noteScreen').classList.add('hidden');G.state='play';};
+function updateHUD(){
+  if(!G.player)return;
+  document.getElementById('healthFill').style.width=G.player.health+'%';
+  document.getElementById('batteryFill').style.width=G.player.battery+'%';
+  document.getElementById('roomNum').textContent=(G.inSecret?'★ ':'')+(G.room+1)+' / 25';
+  document.getElementById('btnFlash').classList.toggle('active',G.player.flashlight);
+}
+function saveGame(){
+  localStorage.setItem('theater_shadows_v2', JSON.stringify({
+    room:G.room, health:G.player?.health??100, battery:G.player?.battery??100,
+    keys:G.keys, hasKey:G.hasKey, hasCrowbar:G.hasCrowbar, notesFound:G.notesFound
+  }));
+}
+function loadGame(){try{return JSON.parse(localStorage.getItem('theater_shadows_v2')||'null');}catch(e){return null;}}
+function hasSave(){return!!localStorage.getItem('theater_shadows_v2');}
+
+// ===== FLOW =====
+function startGame(fromSave=false){
+  document.getElementById('titleScreen').classList.add('hidden');
+  document.getElementById('settingsScreen').classList.add('hidden');
+  document.getElementById('deathScreen').classList.add('hidden');
+  document.getElementById('winScreen').classList.add('hidden');
+  document.getElementById('hud').classList.remove('hidden');
+  document.getElementById('controls').classList.remove('hidden');
+  document.getElementById('btnSettings').classList.remove('hidden');
+  const saved=fromSave?loadGame():null;
+  G.room=saved?.room??0; G.keys=saved?.keys??0; G.hasKey=saved?.hasKey??false;
+  G.hasCrowbar=saved?.hasCrowbar??false; G.notesFound=saved?.notesFound??[];
+  G.inSecret=false; G.entities=[]; G.fog=[]; G.time=0; G.shake=0;
+  enterRoom(G.room);
+  if(saved&&G.player){G.player.health=saved.health;G.player.battery=saved.battery;}
+  G.state='play';
+}
+function enterRoom(idx, keep=false, asSecret=false){
+  G.room=idx; G.roomData=generateRoom(idx, asSecret);
+  G.player=new Player(G.roomData.enterX+25, G.roomData.enterY);
+  spawnEntities(G.roomData);
+  G.fog=[];
+  for(let i=0;i<35;i++) G.fog.push({x:Math.random()*G.roomData.w,y:Math.random()*G.roomData.h,r:25+Math.random()*45,a:0.02+Math.random()*0.035,vx:(Math.random()-0.5)*0.25,vy:(Math.random()-0.5)*0.15});
+  showMsg(G.roomData.name); saveGame();
+}
+function nextRoom(){if(G.room>=24){win();return;} if(G.player)G.player.health=Math.min(100,G.player.health+10); enterRoom(G.room+1);}
+function die(){G.state='dead';document.getElementById('deathScreen').classList.remove('hidden');document.getElementById('controls').classList.add('hidden');document.getElementById('btnSettings').classList.add('hidden');localStorage.removeItem('theater_shadows_v2');}
+function win(){G.state='win';document.getElementById('winScreen').classList.remove('hidden');document.getElementById('controls').classList.add('hidden');document.getElementById('btnSettings').classList.add('hidden');localStorage.removeItem('theater_shadows_v2');}
+
+document.getElementById('btnStart').onclick=()=>startGame(false);
+document.getElementById('btnContinue').onclick=()=>startGame(true);
+document.getElementById('btnRestart').onclick=()=>startGame(false);
+document.getElementById('btnWinRestart').onclick=()=>startGame(false);
+document.getElementById('btnOpenSettings').onclick=()=>{document.getElementById('titleScreen').classList.add('hidden');document.getElementById('settingsScreen').classList.remove('hidden');};
+document.getElementById('btnSettings').onclick=()=>{if(G.state==='play'){G.state='settings';document.getElementById('settingsScreen').classList.remove('hidden');}};
+document.getElementById('btnCloseSettings').onclick=()=>{document.getElementById('settingsScreen').classList.add('hidden');if(G.state==='settings')G.state='play';else document.getElementById('titleScreen').classList.remove('hidden');};
+document.getElementById('btnResetSave').onclick=()=>{localStorage.removeItem('theater_shadows_v2');document.getElementById('btnContinue').style.display='none';showMsg('Сохранение сброшено');};
+if(hasSave()) document.getElementById('btnContinue').style.display='inline-block';
+
+// ===== DRAW =====
+function drawRoom(camX,camY){
+  const room=G.roomData;
+  ctx.fillStyle=room.isSecret?'#1a1208':'#241810';
+  ctx.fillRect(-camX,-camY,room.w,room.h);
+  ctx.strokeStyle='rgba(70,50,30,0.18)'; ctx.lineWidth=1;
+  if(room.floorPattern===0) for(let x=0;x<room.w;x+=36){ctx.beginPath();ctx.moveTo(x-camX,-camY);ctx.lineTo(x-camX,room.h-camY);ctx.stroke();}
+
+  if(G.meatActive&&G.meatFlood>0){
+    const fy=room.h-G.meatFlood*room.h*0.85;
+    const grad=ctx.createLinearGradient(0,fy-camY,0,room.h-camY);
+    grad.addColorStop(0,'rgba(80,10,10,0.7)'); grad.addColorStop(0.4,'rgba(120,20,15,0.85)'); grad.addColorStop(1,'rgba(40,5,5,0.95)');
+    ctx.fillStyle=grad; ctx.fillRect(-camX,fy-camY,room.w,room.h-fy+10);
+    ctx.fillStyle='rgba(160,30,20,0.55)';
+    for(let i=0;i<12;i++){const cx=(i*97+G.time*0.5)%room.w; ctx.beginPath(); ctx.ellipse(cx-camX,fy+20+Math.sin(i+G.time*0.05)*8-camY,14,8,0,0,Math.PI*2); ctx.fill();}
+  }
+  if(G.surfMode){
+    ctx.fillStyle='rgba(90,15,12,0.72)'; ctx.fillRect(-camX,room.h*0.35-camY,room.w,room.h*0.4);
+    if(G.player){ctx.fillStyle='#5a3a18';ctx.fillRect(G.player.x-28-camX,G.player.y+8-camY,56,10);ctx.fillStyle='#3a2410';ctx.fillRect(G.player.x-28-camX,G.player.y+8-camY,56,3);}
+  }
+
+  ctx.fillStyle='#140c08';
+  ctx.fillRect(-camX,-camY,room.w,16); ctx.fillRect(-camX,room.h-16-camY,room.w,16);
+  ctx.fillRect(-camX,-camY,16,room.h); ctx.fillRect(room.w-16-camX,-camY,16,room.h);
+  ctx.strokeStyle='#3a2818'; ctx.lineWidth=2; ctx.strokeRect(16-camX,16-camY,room.w-32,room.h-32);
+
+  const open=!room.locked||G.hasKey||(room.isSecret&&G.hasCrowbar);
+  ctx.fillStyle=open?'#2a1c10':'#1a0c08';
+  ctx.fillRect(room.exitX-6-camX,room.exitY-36-camY,20,72);
+  ctx.strokeStyle='#6a4a28'; ctx.lineWidth=2.5; ctx.strokeRect(room.exitX-8-camX,room.exitY-38-camY,24,76);
+  ctx.fillStyle='#c0a050'; ctx.beginPath(); ctx.arc(room.exitX+8-camX,room.exitY-camY,2.5,0,Math.PI*2); ctx.fill();
+  if(room.locked&&!open){ctx.fillStyle='#801018';ctx.fillRect(room.exitX-1-camX,room.exitY-6-camY,8,10);}
+
+  if(room.secretX){ctx.fillStyle='rgba(60,40,20,0.7)';ctx.fillRect(room.secretX-12-camX,room.secretY-18-camY,24,36);ctx.fillStyle='#8a6a40';ctx.font='10px DoorsCyr';ctx.textAlign='center';ctx.fillText('?',room.secretX-camX,room.secretY+4-camY);}
+  if(room.hatchX){ctx.fillStyle='#1a1008';ctx.fillRect(room.hatchX-20-camX,room.hatchY-8-camY,40,16);ctx.strokeStyle='#5a3a20';ctx.lineWidth=2;ctx.strokeRect(room.hatchX-20-camX,room.hatchY-8-camY,40,16);ctx.fillStyle='#a08040';ctx.font='11px DoorsCyr';ctx.textAlign='center';ctx.fillText('ЛЮК',room.hatchX-camX,room.hatchY+4-camY);}
+
+  ctx.fillStyle='rgba(30,20,12,0.75)'; ctx.fillRect(room.w/2-28-camX,22-camY,56,16);
+  ctx.fillStyle='#b09050'; ctx.font='11px DoorsCyr'; ctx.textAlign='center';
+  ctx.fillText((room.isSecret?'★':'')+(room.index+1),room.w/2-camX,34-camY);
+
+  for(const prop of room.props) drawProp(prop,camX,camY);
+  if(room.keyX){const kx=room.keyX-camX,ky=room.keyY-camY;ctx.fillStyle='#d0b040';ctx.beginPath();ctx.arc(kx,ky,5.5,0,Math.PI*2);ctx.fill();ctx.fillRect(kx+3,ky-1.5,9,3);ctx.fillRect(kx+9,ky-1.5,2.5,6);ctx.fillStyle='rgba(220,180,40,0.2)';ctx.beginPath();ctx.arc(kx,ky,13,0,Math.PI*2);ctx.fill();}
+  if(room.crowbarX){const cx=room.crowbarX-camX,cy=room.crowbarY-camY;ctx.strokeStyle='#6a6a70';ctx.lineWidth=4;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(cx-10,cy+8);ctx.lineTo(cx+10,cy-8);ctx.stroke();ctx.fillStyle='#8a8a90';ctx.beginPath();ctx.arc(cx+10,cy-8,4,0,Math.PI*2);ctx.fill();}
+  if(room.batteryX){const bx=room.batteryX-camX,by=room.batteryY-camY;ctx.fillStyle='#4a6a18';ctx.fillRect(bx-5,by-7,10,14);ctx.fillStyle='#8aba30';ctx.fillRect(bx-3.5,by-4,7,4);}
+  for(const n of room.notes){if(n.taken)continue;const nx=n.x-camX,ny=n.y-camY;ctx.fillStyle='#d8c090';ctx.fillRect(nx-7,ny-9,14,18);ctx.strokeStyle='#8a7040';ctx.lineWidth=1;ctx.strokeRect(nx-7,ny-9,14,18);}
+}
+function drawProp(prop,camX,camY){
+  const px=prop.x-camX,py=prop.y-camY;
+  if(prop.type==='chair'){ctx.fillStyle='#3a2218';ctx.fillRect(px-12,py-5,24,14);ctx.fillStyle='#4a2a20';ctx.fillRect(px-10,py-16,20,12);ctx.fillStyle='#2a1510';ctx.fillRect(px-12,py-18,3.5,24);ctx.fillRect(px+8.5,py-18,3.5,24);}
+  else if(prop.type==='cabinet'){ctx.fillStyle='#2a1c12';ctx.fillRect(px-14,py-20,28,40);ctx.strokeStyle='#4a3020';ctx.lineWidth=1.5;ctx.strokeRect(px-14,py-20,28,40);ctx.beginPath();ctx.moveTo(px,py-20);ctx.lineTo(px,py+20);ctx.stroke();ctx.fillStyle='#c0a050';ctx.beginPath();ctx.arc(px-4,py,1.8,0,Math.PI*2);ctx.arc(px+4,py,1.8,0,Math.PI*2);ctx.fill();}
+  else if(prop.type==='crate'){ctx.fillStyle='#3a2a18';ctx.fillRect(px-14,py-12,28,24);ctx.strokeStyle='#5a4028';ctx.lineWidth=1.5;ctx.strokeRect(px-14,py-12,28,24);}
+  else if(prop.type==='table'){ctx.fillStyle='#2a1c10';ctx.fillRect(px-20,py-7,40,14);ctx.fillStyle='#1a1008';ctx.fillRect(px-18,py+5,4,10);ctx.fillRect(px+14,py+5,4,10);}
+  else if(prop.type==='mirror'){ctx.fillStyle='#1a1520';ctx.fillRect(px-12,py-18,24,36);ctx.fillStyle='rgba(100,130,150,0.25)';ctx.fillRect(px-9,py-15,18,30);ctx.strokeStyle='#6a5a40';ctx.lineWidth=2;ctx.strokeRect(px-12,py-18,24,36);}
+}
+function drawLighting(camX,camY){
+  const p=G.player; if(!p)return;
+  const br=Settings.brightness;
+  ctx.fillStyle=`rgba(8,4,3,${0.48/br})`;
+  ctx.fillRect(0,0,W,H);
+  const lightR=(p.flashlight&&p.battery>0)?(160+Math.sin(G.time*0.07)*6)*Math.min(1.2,br):75*br;
+  const grd=ctx.createRadialGradient(p.x-camX,p.y-camY,0,p.x-camX,p.y-camY,lightR);
+  if(p.flashlight&&p.battery>0){
+    const fl=0.94+Math.sin(G.time*0.25)*0.03;
+    grd.addColorStop(0,`rgba(255,230,180,${0.38*fl})`);
+    grd.addColorStop(0.35,`rgba(220,180,120,${0.2*fl})`);
+    grd.addColorStop(0.7,'rgba(60,40,20,0.06)');
+    grd.addColorStop(1,'rgba(0,0,0,0)');
+  } else {
+    grd.addColorStop(0,`rgba(200,160,100,${0.14*br})`);
+    grd.addColorStop(1,'rgba(0,0,0,0)');
+  }
+  ctx.globalCompositeOperation='destination-out';
+  ctx.fillStyle=grd; ctx.beginPath(); ctx.arc(p.x-camX,p.y-camY,lightR,0,Math.PI*2); ctx.fill();
+  ctx.globalCompositeOperation='source-over';
+  const amb=ctx.createRadialGradient(p.x-camX,p.y-camY,0,p.x-camX,p.y-camY,55);
+  amb.addColorStop(0,`rgba(255,210,140,${0.08*br})`); amb.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=amb; ctx.beginPath(); ctx.arc(p.x-camX,p.y-camY,55,0,Math.PI*2); ctx.fill();
+}
+function drawFog(camX,camY){
+  for(const f of G.fog){
+    f.x+=f.vx; f.y+=f.vy;
+    if(f.x<-40)f.x=G.roomData.w+40; if(f.x>G.roomData.w+40)f.x=-40;
+    if(f.y<-40)f.y=G.roomData.h+40; if(f.y>G.roomData.h+40)f.y=-40;
+    ctx.fillStyle=`rgba(50,35,28,${f.a})`; ctx.beginPath(); ctx.arc(f.x-camX,f.y-camY,f.r,0,Math.PI*2); ctx.fill();
+  }
+}
+function drawVignette(){
+  const g=ctx.createRadialGradient(W/2,H/2,H*0.3,W/2,H/2,H*0.8);
+  g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,0.38)');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+}
+
+// ===== LOOP =====
+let last=performance.now();
+function loop(now){
+  const dt=Math.min((now-last)/16.666,2.4); last=now; G.time+=dt;
+  if(G.state==='play'){
+    updateKeyboard();
+    if(G.player) G.player.update(dt,input);
+    for(const e of G.entities) if(e.alive) e.update(dt,G.player);
+    G.entities=G.entities.filter(e=>e.alive);
+    if(G.messageTimer>0){G.messageTimer-=dt;if(G.messageTimer<=0)document.getElementById('message').classList.remove('show');}
+    if(G.shake>0)G.shake-=dt; if(G.warning>0)G.warning-=dt;
+    updateHUD();
+    const room=G.roomData;
+    let camX=G.player.x-W/2, camY=G.player.y-H/2;
+    camX=Math.max(0,Math.min(camX,room.w-W)); camY=Math.max(0,Math.min(camY,room.h-H));
+    if(room.w<W)camX=(room.w-W)/2; if(room.h<H)camY=(room.h-H)/2;
+    if(G.shake>0){camX+=(Math.random()-0.5)*G.shake;camY+=(Math.random()-0.5)*G.shake;}
+    ctx.fillStyle='#0a0604'; ctx.fillRect(0,0,W,H);
+    drawRoom(camX,camY); drawFog(camX,camY);
+    for(const e of G.entities) if(e.alive) e.draw(camX,camY);
+    if(G.player&&!G.player.hiding) G.player.draw(camX,camY);
+    else if(G.player?.hiding){ctx.fillStyle='rgba(200,180,100,0.55)';ctx.font='13px DoorsCyr';ctx.textAlign='center';ctx.fillText('● спрятан',G.player.x-camX,G.player.y-camY-18);}
+    drawLighting(camX,camY); drawVignette();
+    if(G.warning>0){ctx.fillStyle=`rgba(120,10,10,${(G.warning/50)*0.12})`;ctx.fillRect(0,0,W,H);}
+    if(G.surfMode&&G.player){
+      const bal=G.player.surfBalance||0;
+      ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(W/2-40,50,80,8);
+      ctx.fillStyle=Math.abs(bal)>0.8?'#c02020':'#c0a040';
+      ctx.fillRect(W/2-2+bal*30,48,4,12);
+    }
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+document.addEventListener('touchmove',e=>{if(e.scale!==1)e.preventDefault();},{passive:false});
+</script>
+</body>
+</html>
